@@ -1,0 +1,594 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Physiology SBA">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F2F4F8" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0D1120" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<title>Physiology SBA Practice</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: "bedside monitor" home (ECG strip + vitals) → topic tiles with progress rings → one-column question card with a tap-to-jump strip and thumb-reach action bar */
+:root{
+  --bg:#F2F4F8; --surface:#FFFFFF; --sunk:#E7EBF2; --line:#D3D9E4;
+  --ink:#111A2D; --muted:#58637A; --accent:#4136C7; --accent-ink:#FFFFFF; --accent-soft:#E6E4FB;
+  --trace:#E0475B; --grid:#E9D9DC; --monitor:#FFFFFF;
+  --ok:#14803C; --ok-soft:#DDF4E5; --bad:#C42B39; --bad-soft:#FBE3E5; --amber:#B4570A; --amber-soft:#FCEBD5;
+  --f-display:ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --f-body:-apple-system,"Segoe UI",system-ui,sans-serif;
+  --f-mono:ui-monospace,Menlo,monospace;
+  --r:16px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0D1120; --surface:#151B2D; --sunk:#1D2439; --line:#2A3250;
+  --ink:#E8ECF6; --muted:#97A1B9; --accent:#8F89FF; --accent-ink:#0D1120; --accent-soft:#272A55;
+  --trace:#FF6B7D; --grid:#2A2235; --monitor:#10162A;
+  --ok:#4ADE80; --ok-soft:#123222; --bad:#FF8790; --bad-soft:#3B1A20; --amber:#FBBF24; --amber-soft:#3A2C10; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1120; --surface:#151B2D; --sunk:#1D2439; --line:#2A3250;
+  --ink:#E8ECF6; --muted:#97A1B9; --accent:#8F89FF; --accent-ink:#0D1120; --accent-soft:#272A55;
+  --trace:#FF6B7D; --grid:#2A2235; --monitor:#10162A;
+  --ok:#4ADE80; --ok-soft:#123222; --bad:#FF8790; --bad-soft:#3B1A20; --amber:#FBBF24; --amber-soft:#3A2C10; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:400 17px/1.55 var(--f-body);-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button{font:inherit;color:inherit}
+.wrap{max-width:820px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 130px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0}
+.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.label{font-size:12px;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);font-weight:700}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* monitor hero */
+.monitor{position:relative;border-radius:22px;background:var(--monitor);border:1px solid var(--line);overflow:hidden;margin-bottom:18px}
+.monitor .head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;padding:18px 20px 0}
+.monitor h1{font-size:clamp(26px,5.4vw,38px);font-weight:800;letter-spacing:-.02em;line-height:1.08}
+.monitor .sub{color:var(--muted);margin:6px 0 0;max-width:46ch}
+.ecg{display:block;width:100%;height:96px}
+.vitals{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line)}
+.vital{padding:10px 14px 12px;border-left:1px solid var(--line);min-width:0}
+.vital:first-child{border-left:0}
+.vital .v{font-family:var(--f-mono);font-weight:700;font-size:clamp(20px,4.6vw,28px);line-height:1.1}
+.vital .v small{font-size:.5em;color:var(--muted);font-weight:500;margin-left:2px}
+.vital.hr .v{color:var(--trace)}
+@media (max-width:520px){.vitals{grid-template-columns:repeat(2,1fr)}.vital:nth-child(3){border-left:0}.vital:nth-child(n+3){border-top:1px solid var(--line)}}
+
+.modes{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:24px}
+@media (max-width:700px){.modes{grid-template-columns:1fr 1fr}.modes .mode.primary{grid-column:1/-1}}
+.result + .group-h + .dots + .modes,.card .modes{grid-template-columns:1fr}
+.mode{display:flex;flex-direction:column;gap:3px;text-align:left;padding:14px 16px;border-radius:var(--r);border:1px solid var(--line);background:var(--surface);cursor:pointer;min-height:76px;transition:transform .12s}
+.mode:active{transform:scale(.98)}
+.mode strong{font-family:var(--f-display);font-weight:700;font-size:16px}
+.mode span{color:var(--muted);font-size:14px;line-height:1.35}
+.mode.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.mode.primary span{color:inherit;opacity:.82}
+.mode.exam{border-color:var(--amber);background:var(--amber-soft)}
+.mode.exam strong{color:var(--amber)}
+.mode:disabled{opacity:.45;cursor:default}
+.group-h{margin:4px 0 10px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
+.tile{display:grid;grid-template-columns:1fr 64px;gap:2px 12px;align-items:center;text-align:left;padding:14px 14px 14px 16px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface);cursor:pointer;min-height:96px;transition:transform .12s,border-color .12s}
+.tile:hover{border-color:var(--accent)}
+.tile:active{transform:scale(.98)}
+.tile .abbr{font-family:var(--f-mono);font-weight:700;font-size:12px;letter-spacing:.06em;color:var(--accent)}
+.tile .name{font-family:var(--f-display);font-weight:700;font-size:17px;line-height:1.2}
+.tile .meta{color:var(--muted);font-size:14px}
+.tile svg{grid-row:1/4;grid-column:2}
+.ring-bg{stroke:var(--sunk)} .ring-ok{stroke:var(--ok)} .ring-bad{stroke:var(--bad)}
+.ring-txt{fill:var(--ink);font-family:var(--f-mono);font-weight:700;font-size:15px}
+.ring-sub{fill:var(--muted);font-family:var(--f-body);font-size:9px}
+.foot{margin-top:28px;color:var(--muted);font-size:14px;max-width:62ch}
+.linkbtn{background:none;border:0;padding:0;color:var(--accent);text-decoration:underline;cursor:pointer;font-size:14px}
+
+/* quiz */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px 8px;margin-bottom:12px}
+.top .row{display:flex;align-items:center;gap:8px}
+.iconbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:44px;height:44px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);cursor:pointer;font-weight:700;font-size:15px}
+.iconbtn.on{background:var(--amber-soft);border-color:var(--amber);color:var(--amber)}
+.where{flex:1;min-width:0}
+.where .t{font-family:var(--f-display);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.where .s{font-size:13px;color:var(--muted)}
+.streak{display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 10px;border-radius:999px;background:var(--sunk);font-family:var(--f-mono);font-weight:700;font-size:14px;color:var(--muted);transition:background .2s,color .2s}
+.streak.hot{background:var(--bad-soft);color:var(--trace)}
+.streak svg{width:22px;height:14px}
+.timer{font-family:var(--f-mono);font-weight:700;color:var(--amber)}
+.dots{display:flex;gap:5px;overflow-x:auto;padding:10px 2px 4px;scrollbar-width:none}
+.dots::-webkit-scrollbar{display:none}
+.dot{flex:0 0 auto;width:26px;height:26px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface);font-family:var(--f-mono);font-size:10px;color:var(--muted);cursor:pointer;padding:0;display:grid;place-items:center}
+.dot.ok{background:var(--ok);border-color:var(--ok);color:var(--surface)}
+.dot.bad{background:var(--bad);border-color:var(--bad);color:var(--surface)}
+.dot.sel{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.dot.cur{outline:2.5px solid var(--ink);outline-offset:1.5px}
+.dot.flag{box-shadow:inset 0 -4px 0 var(--amber)}
+.bar{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden;margin-top:8px}
+.bar i{display:block;height:100%;background:var(--accent);transition:width .25s}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:20px 18px;position:relative}
+.card.enter{animation:enter .28s ease-out}
+.card.pulse{animation:pulse .6s ease-out}
+.card.shake{animation:shake .38s ease-in-out}
+@keyframes enter{from{opacity:.4;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 55%,transparent)}100%{box-shadow:0 0 0 18px transparent}}
+@keyframes shake{20%{transform:translateX(-7px)}40%{transform:translateX(6px)}60%{transform:translateX(-4px)}80%{transform:translateX(2px)}}
+.qno{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.chip{display:inline-flex;align-items:center;height:26px;padding:0 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-family:var(--f-mono);font-weight:700;font-size:12px;letter-spacing:.04em}
+.stem p{margin:0 0 .7em}
+.stem p:last-child{font-weight:700;margin-bottom:0}
+.note{background:var(--amber-soft);color:var(--amber);border-radius:10px;padding:10px 12px;font-size:15px;margin-bottom:12px}
+figure{margin:14px 0 4px;text-align:center}
+figure img{border-radius:10px;border:1px solid var(--line);max-height:60vh;max-width:100%;height:auto;width:auto;cursor:zoom-in;background:#fff}
+.opts{display:flex;flex-direction:column;gap:10px;margin-top:18px}
+.opt{display:grid;grid-template-columns:38px 1fr 22px;align-items:center;gap:12px;text-align:left;width:100%;padding:12px 14px;border-radius:14px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer;min-height:58px;font-size:17px;line-height:1.35;transition:border-color .15s,background .15s,transform .1s}
+.opt:active:not(:disabled){transform:scale(.99)}
+.opt .L{width:36px;height:36px;border-radius:11px;display:grid;place-items:center;background:var(--sunk);font-family:var(--f-mono);font-weight:700}
+.opt .mark{font-weight:700;text-align:center}
+.opt:hover:not(:disabled){border-color:var(--accent)}
+.opt:disabled{cursor:default}
+.opt.picked{border-color:var(--accent);background:var(--accent-soft)}
+.opt.picked .L{background:var(--accent);color:var(--accent-ink)}
+.opt.correct{border-color:var(--ok);background:var(--ok-soft)}
+.opt.correct .L{background:var(--ok);color:var(--surface)}
+.opt.correct .mark{color:var(--ok)}
+.opt.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.opt.wrong .L{background:var(--bad);color:var(--surface)}
+.opt.wrong .mark{color:var(--bad)}
+.opt.dim{opacity:.55}
+.verdict{scroll-margin-top:calc(130px + env(safe-area-inset-top,0px));display:flex;align-items:center;gap:12px;margin:18px 0 10px;padding:14px 16px;border-radius:var(--r);font-family:var(--f-display);font-size:19px;font-weight:700}
+.verdict.ok{background:var(--ok-soft);color:var(--ok)} .verdict.bad{background:var(--bad-soft);color:var(--bad)}
+.verdict .big{font-size:30px;line-height:1}
+.exp{display:flex;flex-direction:column;gap:8px}
+details.xp{border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+details.xp summary{list-style:none;display:flex;gap:10px;align-items:baseline;padding:12px 14px;cursor:pointer;font-weight:700}
+details.xp summary::-webkit-details-marker{display:none}
+details.xp summary .L{font-family:var(--f-mono);color:var(--muted)}
+details.xp summary .tag{margin-left:auto;font-size:11px;letter-spacing:.07em;text-transform:uppercase;white-space:nowrap;color:var(--muted)}
+details.xp summary::after{content:"+";font-family:var(--f-mono);color:var(--muted);margin-left:8px}
+details.xp[open] summary::after{content:"−"}
+details.xp.is-correct{border-color:var(--ok)}
+details.xp.is-correct summary{background:var(--ok-soft);color:var(--ok)}
+details.xp.is-correct summary .L,details.xp.is-correct summary .tag{color:var(--ok)}
+details.xp.is-chosen summary{background:var(--bad-soft);color:var(--bad)}
+details.xp.is-chosen summary .L,details.xp.is-chosen summary .tag{color:var(--bad)}
+.xp .body{padding:10px 14px 14px}
+.xp .body p{margin:0 0 .6em}
+.xp .body p:last-child{margin-bottom:0}
+.xp .empty{color:var(--muted);font-style:italic}
+.actions{position:fixed;left:0;right:0;bottom:0;z-index:6;background:color-mix(in srgb,var(--bg) 90%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-top:1px solid var(--line);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-top:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}
+.actions .in{max-width:820px;margin:0 auto;display:flex;gap:10px}
+.btn{flex:1;height:54px;border-radius:14px;border:1px solid var(--line);background:var(--surface);font-weight:700;font-size:17px;cursor:pointer}
+.btn.go{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.warn{background:var(--amber);border-color:var(--amber);color:var(--surface)}
+.btn:disabled{opacity:.4;cursor:default}
+.src{margin-top:14px;font-size:13px;color:var(--muted)}
+.hint{font-size:13px;color:var(--muted);text-align:center;margin-top:10px}
+.lightbox{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.88);display:grid;place-items:center;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(16px + env(safe-area-inset-bottom,0px))}
+.lightbox img{max-width:100%;max-height:100%;border-radius:8px;background:#fff}
+.result{display:grid;grid-template-columns:auto 1fr;gap:18px 22px;align-items:center}
+.result h2{font-size:26px}
+.result .stats{display:flex;gap:18px;flex-wrap:wrap;color:var(--muted)}
+.result .stats b{display:block;font-family:var(--f-mono);font-size:22px;color:var(--ink)}
+@media (max-width:520px){.result{grid-template-columns:1fr;justify-items:center;text-align:center}.result .stats{justify-content:center}}
+.loading{color:var(--muted);padding:40px 0;text-align:center}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+
+.lock{max-width:420px;margin:12vh auto 0;display:flex;flex-direction:column;gap:14px}
+.lock input{height:52px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:18px;padding:0 14px}
+.lock input:focus{outline:3px solid var(--accent);outline-offset:1px}
+.lock .err{color:var(--bad);min-height:1.4em;margin:0}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}
+</style>
+
+</head><body>
+<div id="app" class="wrap"><p class="loading">Loading questions…</p></div>
+<div id="actions" class="actions" hidden><div class="in">
+  <button class="btn" id="prevBtn" type="button">Previous</button>
+  <button class="btn go" id="nextBtn" type="button">Next</button>
+</div></div>
+<div id="lightbox" class="lightbox" hidden><img id="lbImg" alt=""></div>
+
+<script>
+const MANIFEST = {"topics":[{"slug":"General_Physiology","title":"General Physiology","abbr":"GEN","count":133,"ids":["General_Physiology-75-1","General_Physiology-75-2","General_Physiology-75-3","General_Physiology-75-4","General_Physiology-75-5","General_Physiology-75-6","General_Physiology-75-7","General_Physiology-75-8","General_Physiology-75-9","General_Physiology-75-10","General_Physiology-75-11","General_Physiology-75-12","General_Physiology-75-13","General_Physiology-75-14","General_Physiology-75-15","General_Physiology-75-16","General_Physiology-75-17","General_Physiology-75-18","General_Physiology-75-19","General_Physiology-75-20","General_Physiology-75-21","General_Physiology-75-22","General_Physiology-75-23","General_Physiology-75-24","General_Physiology-75-25","General_Physiology-75-26","General_Physiology-75-27","General_Physiology-75-28","General_Physiology-75-29","General_Physiology-75-30","General_Physiology-75-31","General_Physiology-75-32","General_Physiology-75-33","General_Physiology-75-34","General_Physiology-75-35","General_Physiology-75-36","General_Physiology-75-37","General_Physiology-75-38","General_Physiology-75-39","General_Physiology-75-40","General_Physiology-75-41","General_Physiology-75-42","General_Physiology-75-43","General_Physiology-75-44","General_Physiology-75-45","General_Physiology-75-46","General_Physiology-75-47","General_Physiology-75-48","General_Physiology-75-49","General_Physiology-75-50","General_Physiology-75-51","General_Physiology-75-52","General_Physiology-75-53","General_Physiology-75-54","General_Physiology-75-55","General_Physiology-75-56","General_Physiology-75-57","General_Physiology-75-58","General_Physiology-75-59","General_Physiology-75-60","General_Physiology-75-61","General_Physiology-75-62","General_Physiology-75-63","General_Physiology-75-64","General_Physiology-75-65","General_Physiology-75-66","General_Physiology-75-67","General_Physiology-75-68","General_Physiology-75-69","General_Physiology-75-70","General_Physiology-75-71","General_Physiology-75-72","General_Physiology-75-73","General_Physiology-75-74","General_Physiology-75-75","General_Physiology-58-1","General_Physiology-58-2","General_Physiology-58-3","General_Physiology-58-4","General_Physiology-58-5","General_Physiology-58-6","General_Physiology-58-7","General_Physiology-58-8","General_Physiology-58-9","General_Physiology-58-10","General_Physiology-58-11","General_Physiology-58-12","General_Physiology-58-13","General_Physiology-58-14","General_Physiology-58-15","General_Physiology-58-16","General_Physiology-58-17","General_Physiology-58-18","General_Physiology-58-19","General_Physiology-58-20","General_Physiology-58-21","General_Physiology-58-22","General_Physiology-58-23","General_Physiology-58-24","General_Physiology-58-25","General_Physiology-58-26","General_Physiology-58-27","General_Physiology-58-28","General_Physiology-58-29","General_Physiology-58-30","General_Physiology-58-31","General_Physiology-58-32","General_Physiology-58-33","General_Physiology-58-34","General_Physiology-58-35","General_Physiology-58-36","General_Physiology-58-37","General_Physiology-58-38","General_Physiology-58-39","General_Physiology-58-40","General_Physiology-58-41","General_Physiology-58-42","General_Physiology-58-43","General_Physiology-58-44","General_Physiology-58-45","General_Physiology-58-46","General_Physiology-58-47","General_Physiology-58-48","General_Physiology-58-49","General_Physiology-58-50","General_Physiology-58-51","General_Physiology-58-52","General_Physiology-58-53","General_Physiology-58-54","General_Physiology-58-55","General_Physiology-58-56","General_Physiology-58-57","General_Physiology-58-58"]},{"slug":"Cardiovascular_Physiology","title":"Cardiovascular","abbr":"CVS","count":67,"ids":["Cardiovascular_Physiology-67-1","Cardiovascular_Physiology-67-2","Cardiovascular_Physiology-67-3","Cardiovascular_Physiology-67-4","Cardiovascular_Physiology-67-5","Cardiovascular_Physiology-67-6","Cardiovascular_Physiology-67-7","Cardiovascular_Physiology-67-8","Cardiovascular_Physiology-67-9","Cardiovascular_Physiology-67-10","Cardiovascular_Physiology-67-11","Cardiovascular_Physiology-67-12","Cardiovascular_Physiology-67-13","Cardiovascular_Physiology-67-14","Cardiovascular_Physiology-67-15","Cardiovascular_Physiology-67-16","Cardiovascular_Physiology-67-17","Cardiovascular_Physiology-67-18","Cardiovascular_Physiology-67-19","Cardiovascular_Physiology-67-20","Cardiovascular_Physiology-67-21","Cardiovascular_Physiology-67-22","Cardiovascular_Physiology-67-23","Cardiovascular_Physiology-67-24","Cardiovascular_Physiology-67-25","Cardiovascular_Physiology-67-26","Cardiovascular_Physiology-67-27","Cardiovascular_Physiology-67-28","Cardiovascular_Physiology-67-29","Cardiovascular_Physiology-67-30","Cardiovascular_Physiology-67-31","Cardiovascular_Physiology-67-32","Cardiovascular_Physiology-67-33","Cardiovascular_Physiology-67-34","Cardiovascular_Physiology-67-35","Cardiovascular_Physiology-67-36","Cardiovascular_Physiology-67-37","Cardiovascular_Physiology-67-38","Cardiovascular_Physiology-67-39","Cardiovascular_Physiology-67-40","Cardiovascular_Physiology-67-41","Cardiovascular_Physiology-67-42","Cardiovascular_Physiology-67-43","Cardiovascular_Physiology-67-44","Cardiovascular_Physiology-67-45","Cardiovascular_Physiology-67-46","Cardiovascular_Physiology-67-47","Cardiovascular_Physiology-67-48","Cardiovascular_Physiology-67-49","Cardiovascular_Physiology-67-50","Cardiovascular_Physiology-67-51","Cardiovascular_Physiology-67-52","Cardiovascular_Physiology-67-53","Cardiovascular_Physiology-67-54","Cardiovascular_Physiology-67-55","Cardiovascular_Physiology-67-56","Cardiovascular_Physiology-67-57","Cardiovascular_Physiology-67-58","Cardiovascular_Physiology-67-59","Cardiovascular_Physiology-67-60","Cardiovascular_Physiology-67-61","Cardiovascular_Physiology-67-62","Cardiovascular_Physiology-67-63","Cardiovascular_Physiology-67-64","Cardiovascular_Physiology-67-65","Cardiovascular_Physiology-67-66","Cardiovascular_Physiology-67-67"]},{"slug":"Respiratory_Physiology","title":"Respiratory","abbr":"RESP","count":55,"ids":["Respiratory_Physiology-56-1","Respiratory_Physiology-56-2","Respiratory_Physiology-56-3","Respiratory_Physiology-56-4","Respiratory_Physiology-56-5","Respiratory_Physiology-56-6","Respiratory_Physiology-56-7","Respiratory_Physiology-56-8","Respiratory_Physiology-56-9","Respiratory_Physiology-56-10","Respiratory_Physiology-56-11","Respiratory_Physiology-56-12","Respiratory_Physiology-56-13","Respiratory_Physiology-56-14","Respiratory_Physiology-56-15","Respiratory_Physiology-56-16","Respiratory_Physiology-56-17","Respiratory_Physiology-56-18","Respiratory_Physiology-56-19","Respiratory_Physiology-56-20","Respiratory_Physiology-56-21","Respiratory_Physiology-56-22","Respiratory_Physiology-56-23","Respiratory_Physiology-56-24","Respiratory_Physiology-56-25","Respiratory_Physiology-56-26","Respiratory_Physiology-56-27","Respiratory_Physiology-56-28","Respiratory_Physiology-56-29","Respiratory_Physiology-56-30","Respiratory_Physiology-56-31","Respiratory_Physiology-56-32","Respiratory_Physiology-56-33","Respiratory_Physiology-56-34","Respiratory_Physiology-56-35","Respiratory_Physiology-56-36","Respiratory_Physiology-56-37","Respiratory_Physiology-56-38","Respiratory_Physiology-56-39","Respiratory_Physiology-56-40","Respiratory_Physiology-56-41","Respiratory_Physiology-56-42","Respiratory_Physiology-56-43","Respiratory_Physiology-56-44","Respiratory_Physiology-56-45","Respiratory_Physiology-56-46","Respiratory_Physiology-56-47","Respiratory_Physiology-56-48","Respiratory_Physiology-56-49","Respiratory_Physiology-56-50","Respiratory_Physiology-56-51","Respiratory_Physiology-56-52","Respiratory_Physiology-56-53","Respiratory_Physiology-56-54","Respiratory_Physiology-56-55"]},{"slug":"Renal_Physiology","title":"Renal","abbr":"RENAL","count":31,"ids":["Renal_Physiology-31-1","Renal_Physiology-31-2","Renal_Physiology-31-3","Renal_Physiology-31-4","Renal_Physiology-31-5","Renal_Physiology-31-6","Renal_Physiology-31-7","Renal_Physiology-31-8","Renal_Physiology-31-9","Renal_Physiology-31-10","Renal_Physiology-31-11","Renal_Physiology-31-12","Renal_Physiology-31-13","Renal_Physiology-31-14","Renal_Physiology-31-15","Renal_Physiology-31-16","Renal_Physiology-31-17","Renal_Physiology-31-18","Renal_Physiology-31-19","Renal_Physiology-31-20","Renal_Physiology-31-21","Renal_Physiology-31-22","Renal_Physiology-31-23","Renal_Physiology-31-24","Renal_Physiology-31-25","Renal_Physiology-31-26","Renal_Physiology-31-27","Renal_Physiology-31-28","Renal_Physiology-31-29","Renal_Physiology-31-30","Renal_Physiology-31-31"]},{"slug":"GI_Physiology","title":"Gastrointestinal","abbr":"GI","count":35,"ids":["GI_Physiology-35-1","GI_Physiology-35-2","GI_Physiology-35-3","GI_Physiology-35-4","GI_Physiology-35-5","GI_Physiology-35-6","GI_Physiology-35-7","GI_Physiology-35-8","GI_Physiology-35-9","GI_Physiology-35-10","GI_Physiology-35-11","GI_Physiology-35-12","GI_Physiology-35-13","GI_Physiology-35-14","GI_Physiology-35-15","GI_Physiology-35-16","GI_Physiology-35-17","GI_Physiology-35-18","GI_Physiology-35-19","GI_Physiology-35-20","GI_Physiology-35-21","GI_Physiology-35-22","GI_Physiology-35-23","GI_Physiology-35-24","GI_Physiology-35-25","GI_Physiology-35-26","GI_Physiology-35-27","GI_Physiology-35-28","GI_Physiology-35-29","GI_Physiology-35-30","GI_Physiology-35-31","GI_Physiology-35-32","GI_Physiology-35-33","GI_Physiology-35-34","GI_Physiology-35-35"]},{"slug":"Endocrine_Physiology","title":"Endocrine","abbr":"ENDO","count":62,"ids":["Endocrine_Physiology-62-1","Endocrine_Physiology-62-2","Endocrine_Physiology-62-3","Endocrine_Physiology-62-4","Endocrine_Physiology-62-5","Endocrine_Physiology-62-6","Endocrine_Physiology-62-7","Endocrine_Physiology-62-8","Endocrine_Physiology-62-9","Endocrine_Physiology-62-10","Endocrine_Physiology-62-11","Endocrine_Physiology-62-12","Endocrine_Physiology-62-13","Endocrine_Physiology-62-14","Endocrine_Physiology-62-15","Endocrine_Physiology-62-16","Endocrine_Physiology-62-17","Endocrine_Physiology-62-18","Endocrine_Physiology-62-19","Endocrine_Physiology-62-20","Endocrine_Physiology-62-21","Endocrine_Physiology-62-22","Endocrine_Physiology-62-23","Endocrine_Physiology-62-24","Endocrine_Physiology-62-25","Endocrine_Physiology-62-26","Endocrine_Physiology-62-27","Endocrine_Physiology-62-28","Endocrine_Physiology-62-29","Endocrine_Physiology-62-30","Endocrine_Physiology-62-31","Endocrine_Physiology-62-32","Endocrine_Physiology-62-33","Endocrine_Physiology-62-34","Endocrine_Physiology-62-35","Endocrine_Physiology-62-36","Endocrine_Physiology-62-37","Endocrine_Physiology-62-38","Endocrine_Physiology-62-39","Endocrine_Physiology-62-40","Endocrine_Physiology-62-41","Endocrine_Physiology-62-42","Endocrine_Physiology-62-43","Endocrine_Physiology-62-44","Endocrine_Physiology-62-45","Endocrine_Physiology-62-46","Endocrine_Physiology-62-47","Endocrine_Physiology-62-48","Endocrine_Physiology-62-49","Endocrine_Physiology-62-50","Endocrine_Physiology-62-51","Endocrine_Physiology-62-52","Endocrine_Physiology-62-53","Endocrine_Physiology-62-54","Endocrine_Physiology-62-55","Endocrine_Physiology-62-56","Endocrine_Physiology-62-57","Endocrine_Physiology-62-58","Endocrine_Physiology-62-59","Endocrine_Physiology-62-60","Endocrine_Physiology-62-61","Endocrine_Physiology-62-62"]},{"slug":"Neurophysiology","title":"Neurophysiology","abbr":"NEURO","count":31,"ids":["Neurophysiology-31-1","Neurophysiology-31-2","Neurophysiology-31-3","Neurophysiology-31-4","Neurophysiology-31-5","Neurophysiology-31-6","Neurophysiology-31-7","Neurophysiology-31-8","Neurophysiology-31-9","Neurophysiology-31-10","Neurophysiology-31-11","Neurophysiology-31-12","Neurophysiology-31-13","Neurophysiology-31-14","Neurophysiology-31-15","Neurophysiology-31-16","Neurophysiology-31-17","Neurophysiology-31-18","Neurophysiology-31-19","Neurophysiology-31-20","Neurophysiology-31-21","Neurophysiology-31-22","Neurophysiology-31-23","Neurophysiology-31-24","Neurophysiology-31-25","Neurophysiology-31-26","Neurophysiology-31-27","Neurophysiology-31-28","Neurophysiology-31-29","Neurophysiology-31-30","Neurophysiology-31-31"]},{"slug":"Embryology","title":"Embryology","abbr":"EMB","count":53,"ids":["Embryology-53-1","Embryology-53-2","Embryology-53-3","Embryology-53-4","Embryology-53-5","Embryology-53-6","Embryology-53-7","Embryology-53-8","Embryology-53-9","Embryology-53-10","Embryology-53-11","Embryology-53-12","Embryology-53-13","Embryology-53-14","Embryology-53-15","Embryology-53-16","Embryology-53-17","Embryology-53-18","Embryology-53-19","Embryology-53-20","Embryology-53-21","Embryology-53-22","Embryology-53-23","Embryology-53-24","Embryology-53-25","Embryology-53-26","Embryology-53-27","Embryology-53-28","Embryology-53-29","Embryology-53-30","Embryology-53-31","Embryology-53-32","Embryology-53-33","Embryology-53-34","Embryology-53-35","Embryology-53-36","Embryology-53-37","Embryology-53-38","Embryology-53-39","Embryology-53-40","Embryology-53-41","Embryology-53-42","Embryology-53-43","Embryology-53-44","Embryology-53-45","Embryology-53-46","Embryology-53-47","Embryology-53-48","Embryology-53-49","Embryology-53-50","Embryology-53-51","Embryology-53-52","Embryology-53-53"]}]};
+const PREFIX = 'physio-';
+const app = document.getElementById('app');
+const actions = document.getElementById('actions');
+const cache = {};
+const SALT = Uint8Array.from(atob("oHfgD0wUs8xbKyrDTpVf7Q=="), c => c.charCodeAt(0));
+let KEY = null;
+async function deriveKey(pass){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', salt:SALT, iterations:200000, hash:'SHA-256'}, base, {name:'AES-GCM', length:256}, false, ['decrypt']);
+}
+async function decryptFile(path){
+  const buf = new Uint8Array(await (await fetch(path)).arrayBuffer());
+  return crypto.subtle.decrypt({name:'AES-GCM', iv:buf.slice(0,12)}, KEY, buf.slice(12));
+}
+function normPass(p){ return (p || '').normalize('NFKC').toLowerCase().replace(/[‐-―−]/g, '-').replace(/\s+/g, ''); }
+async function tryUnlock(pass){
+  if (!window.crypto || !crypto.subtle) return 'nocrypto';
+  let res;
+  try { res = await fetch('data/check.bin'); } catch(e) { return 'nofile'; }
+  if (!res.ok) return 'nofile';
+  const buf = new Uint8Array(await res.arrayBuffer());
+  if (buf.length !== 30) return 'nofile';
+  try {
+    const k = await deriveKey(normPass(pass));
+    await crypto.subtle.decrypt({name:'AES-GCM', iv:buf.slice(0,12)}, k, buf.slice(12));
+    KEY = k; return 'ok';
+  } catch(e) { KEY = null; return 'wrong'; }
+}
+const LOCK_MSG = {
+  wrong: "That passcode didn't work. Check it and try again.",
+  nofile: "The app couldn't load its question files. Make sure the data and icons folders were uploaded as folders next to index.html, then reload.",
+  nocrypto: "Open this app from its https web link in Safari. It can't unlock when opened as a file."
+};
+function lockScreen(msg){
+  actions.hidden = true;
+  app.innerHTML = `<form class="lock" id="lockForm" autocomplete="off">
+    <h1>Physiology SBA Practice</h1>
+    <p>Enter your passcode to unlock the question bank. You only need to do this once on each device.</p>
+    <input id="pass" type="password" inputmode="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="Passcode" aria-label="Passcode">
+    <p class="err" id="err">${msg || ''}</p>
+    <button class="btn go" type="submit">Unlock</button></form>`;
+  const f = document.getElementById('lockForm');
+  f.onsubmit = async e => {
+    e.preventDefault();
+    const p = document.getElementById('pass').value.trim();
+    document.getElementById('err').textContent = 'Checking…';
+    const r = await tryUnlock(p);
+    if (r === 'ok') { try { localStorage.setItem('physio-pass', p); } catch(e) {} home(); }
+    else document.getElementById('err').textContent = LOCK_MSG[r];
+  };
+}
+async function boot(){
+  let p = null; try { p = localStorage.getItem('physio-pass'); } catch(e) {}
+  if (p && await tryUnlock(p) === 'ok') home(); else lockScreen();
+}
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+
+function load(k, d){ try { const v = localStorage.getItem(PREFIX + k); return v ? JSON.parse(v) : d; } catch(e){ return d; } }
+function save(k, v){ try { localStorage.setItem(PREFIX + k, JSON.stringify(v)); } catch(e){} }
+let progress = load('progress', {});   // id -> {c, ok, t}
+let flags = load('flags', {});         // id -> 1
+let best = load('best', 0);
+let streak = 0;
+let S = null;
+let ecgTimer = null;
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+async function loadTopic(slug){
+  if (cache[slug]) return cache[slug];
+  const d = JSON.parse(new TextDecoder().decode(await decryptFile('data/' + slug + '.bin'))); d.slug = slug; cache[slug] = d; return d;
+}
+async function loadAll(){ const out = []; for (const t of MANIFEST.topics){ const d = await loadTopic(t.slug); d.questions.forEach(q => out.push({topic: d, q})); } return out; }
+function stats(ids){ let a = 0, c = 0; for (const id of ids){ const p = progress[id]; if (p){ a++; if (p.ok) c++; } } return {a, c}; }
+function ring(total, a, c, size){
+  const r = 26, C = 2 * Math.PI * r, okL = total ? C * c / total : 0, badL = total ? C * (a - c) / total : 0;
+  const pct = a ? Math.round(100 * c / a) : 0;
+  return `<svg width="${size}" height="${size}" viewBox="0 0 64 64" aria-hidden="true">
+    <circle cx="32" cy="32" r="${r}" fill="none" stroke-width="7" class="ring-bg"/>
+    <circle cx="32" cy="32" r="${r}" fill="none" stroke-width="7" class="ring-ok" stroke-dasharray="${okL} ${C}" transform="rotate(-90 32 32)" stroke-linecap="${c ? 'round' : 'butt'}"/>
+    <circle cx="32" cy="32" r="${r}" fill="none" stroke-width="7" class="ring-bad" stroke-dasharray="${badL} ${C}" stroke-dashoffset="${-okL}" transform="rotate(-90 32 32)"/>
+    <text x="32" y="${a ? 33 : 36}" text-anchor="middle" class="ring-txt">${a ? pct + '%' : '–'}</text>
+    ${a ? `<text x="32" y="45" text-anchor="middle" class="ring-sub">${a}/${total}</text>` : ''}
+  </svg>`;
+}
+const BLIP = '<svg viewBox="0 0 44 28" aria-hidden="true"><polyline points="0,16 12,16 16,10 20,16 24,16 27,2 31,26 34,16 44,16" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+
+/* ---------- ECG strip ---------- */
+function startECG(canvas, bpm){
+  if (ecgTimer) cancelAnimationFrame(ecgTimer);
+  const ctx = canvas.getContext('2d');
+  const css = getComputedStyle(document.documentElement);
+  const trace = css.getPropertyValue('--trace').trim(), grid = css.getPropertyValue('--grid').trim();
+  const dpr = window.devicePixelRatio || 1;
+  let W, H;
+  function size(){ W = canvas.clientWidth; H = canvas.clientHeight; canvas.width = W * dpr; canvas.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+  size();
+  const beat = 60 / Math.max(40, Math.min(160, bpm));   // seconds per beat
+  const pxPerSec = 110;
+  function v(t){       // PQRST shape, t in seconds
+    const x = (t % beat) / beat;
+    const g = (m, s, a) => a * Math.exp(-((x - m) ** 2) / (2 * s * s));
+    return g(.18,.025,.12) + g(.30,.008,-.12) + g(.33,.01,1) + g(.36,.009,-.28) + g(.58,.04,.25);
+  }
+  function draw(now){
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = grid; ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 16){ ctx.beginPath(); ctx.moveTo(x + .5, 0); ctx.lineTo(x + .5, H); ctx.stroke(); }
+    for (let y = 0; y < H; y += 16){ ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke(); }
+    const t0 = now / 1000;
+    ctx.strokeStyle = trace; ctx.lineWidth = 2.2; ctx.lineJoin = 'round'; ctx.beginPath();
+    for (let x = 0; x <= W; x += 2){
+      const t = t0 - (W - x) / pxPerSec;
+      const y = H * .66 - v(t) * H * .55;
+      x ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    }
+    ctx.stroke();
+    const yEnd = H * .66 - v(t0) * H * .55;
+    ctx.fillStyle = trace; ctx.beginPath(); ctx.arc(W - 2, yEnd, 3.5, 0, 7); ctx.fill();
+    if (!reduceMotion() && document.body.contains(canvas)) ecgTimer = requestAnimationFrame(draw);
+  }
+  draw(performance.now());
+  window.addEventListener('resize', () => { if (document.body.contains(canvas)){ size(); draw(performance.now()); } }, {once: true});
+}
+
+/* ---------- home ---------- */
+function home(){
+  actions.hidden = true; S = null;
+  let tot = 0;
+  MANIFEST.topics.forEach(t => tot += t.count);
+  const all = Object.keys(progress).length, s = stats(Object.keys(progress));
+  const wrongN = Object.values(progress).filter(p => !p.ok).length;
+  const flagN = Object.keys(flags).length;
+  const today = new Date().toDateString();
+  const todayN = Object.values(progress).filter(p => p.t && new Date(p.t).toDateString() === today).length;
+  const acc = s.a ? Math.round(100 * s.c / s.a) : 0;
+  const bpm = 60 + Math.min(80, todayN * 2);
+  let h = `<section class="monitor">
+      <div class="head"><div><div class="label">From your Pastest screenshots · single best answer</div>
+        <h1>Physiology SBA Practice</h1>
+        <p class="sub">${tot} questions across ${MANIFEST.topics.length} systems. Tap an option to see the answer and why each choice is right or wrong.</p></div></div>
+      <canvas class="ecg" id="ecg" aria-label="Decorative ECG trace whose rate rises with the questions you answer today"></canvas>
+      <div class="vitals">
+        <div class="vital hr"><div class="label">Rate today</div><div class="v">${bpm}<small>bpm</small></div></div>
+        <div class="vital"><div class="label">Answered</div><div class="v">${all}<small>/${tot}</small></div></div>
+        <div class="vital"><div class="label">Accuracy</div><div class="v">${acc}<small>%</small></div></div>
+        <div class="vital"><div class="label">Best streak</div><div class="v">${best}</div></div>
+      </div></section>
+    <div class="modes">
+      <button class="mode primary" type="button" data-mode="mix"><strong>Quick 20</strong><span>Random mix from every system</span></button>
+      <button class="mode exam" type="button" data-mode="exam"><strong>Exam mode</strong><span>30 questions, answers hidden until you finish</span></button>
+      <button class="mode" type="button" data-mode="unseen"><strong>Unseen</strong><span>${tot - all} not answered yet</span></button>
+      <button class="mode" type="button" data-mode="wrong" ${wrongN ? '' : 'disabled'}><strong>Mistakes</strong><span>${wrongN} to revisit</span></button>
+      <button class="mode" type="button" data-mode="flag" ${flagN ? '' : 'disabled'}><strong>Flagged</strong><span>${flagN} marked for review</span></button>
+    </div>
+    <h2 class="label group-h">Systems</h2><div class="tiles">`;
+  for (const t of MANIFEST.topics){
+    const st = stats(t.ids);
+    h += `<button class="tile" type="button" data-topic="${t.slug}">
+      <span class="abbr">${esc(t.abbr)}</span>
+      <span class="name">${esc(t.title)}</span>
+      <span class="meta">${t.count} questions</span>
+      ${ring(t.count, st.a, st.c, 64)}
+    </button>`;
+  }
+  h += `</div><p class="foot">Text was read from the screenshots by text recognition, so expect the odd typo. Progress is saved on this device only.
+    <button class="linkbtn" type="button" id="resetBtn">Reset progress</button></p>`;
+  app.innerHTML = h;
+  window.scrollTo(0, 0);
+  startECG(document.getElementById('ecg'), bpm);
+  app.querySelectorAll('[data-topic]').forEach(b => b.onclick = () => startTopic(b.dataset.topic));
+  app.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => startMode(b.dataset.mode));
+  const rb = document.getElementById('resetBtn');
+  rb.onclick = () => {
+    if (rb.dataset.armed){ progress = {}; flags = {}; best = 0; save('progress', progress); save('flags', flags); save('best', 0); home(); }
+    else { rb.dataset.armed = '1'; rb.textContent = 'Tap again to erase all progress and flags'; }
+  };
+}
+function shuffle(a){ for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+async function startTopic(slug){
+  const d = await loadTopic(slug);
+  const t = MANIFEST.topics.find(x => x.slug === slug);
+  S = {title: d.title, abbr: t.abbr, list: d.questions.map(q => ({topic: d, q})), i: 0, mode: 'topic'};
+  const first = S.list.findIndex(x => !progress[x.q.id]);
+  S.i = first > 0 ? first : 0;
+  streak = 0; render();
+}
+async function startMode(mode){
+  app.innerHTML = '<p class="loading">Loading questions…</p>';
+  const all = await loadAll();
+  const good = all.filter(x => !x.q.noStem);
+  let list, title;
+  if (mode === 'mix'){ list = shuffle(good).slice(0, 20); title = 'Quick 20'; }
+  else if (mode === 'exam'){ list = shuffle(good).slice(0, 30); title = 'Exam mode'; }
+  else if (mode === 'unseen'){ list = shuffle(all.filter(x => !progress[x.q.id])); title = 'Unseen questions'; }
+  else if (mode === 'flag'){ list = all.filter(x => flags[x.q.id]); title = 'Flagged'; }
+  else { list = all.filter(x => progress[x.q.id] && !progress[x.q.id].ok); title = 'Mistakes'; }
+  if (!list.length){ home(); return; }
+  S = {title, list, i: 0, mode, picks: {}, start: Date.now()};
+  streak = 0; render();
+}
+
+/* ---------- question ---------- */
+function paras(arr){ return (arr || []).map(p => `<p>${esc(p)}</p>`).join(''); }
+function figs(q, where){
+  return (q.figs || []).filter(f => f.where === where).map(f => `<figure><img src="${f.src}" alt="Figure from the original question" loading="lazy" width="${f.w}" height="${f.h}"></figure>`).join('');
+}
+function chosenFor(q){
+  if (S.mode === 'exam') return S.done ? S.picks[q.id] : null;
+  if (S.mode === 'wrong') return S.picks && S.picks[q.id];
+  return progress[q.id] && progress[q.id].c;
+}
+function dotClass(x, k){
+  const q = x.q; let c = 'dot';
+  if (S.mode === 'exam'){ const p = S.picks[q.id]; if (p) c += S.done ? (p === q.answer ? ' ok' : ' bad') : ' sel'; }
+  else { const p = S.mode === 'wrong' ? (S.picks[q.id] ? {ok: S.picks[q.id] === q.answer} : null) : progress[q.id]; if (p) c += p.ok ? ' ok' : ' bad'; }
+  if (flags[q.id]) c += ' flag';
+  if (k === S.i) c += ' cur';
+  return c;
+}
+function topBar(){
+  const n = S.list.length;
+  const examLive = S.mode === 'exam' && !S.done;
+  const showDots = n <= 150;
+  let h = `<div class="top"><div class="row">
+      <button class="iconbtn" type="button" id="homeBtn" aria-label="Back to systems">←</button>
+      <div class="where"><div class="t">${esc(S.title)}</div><div class="s mono">${S.i + 1} of ${n}${examLive ? ` · <span class="timer" id="timer"></span>` : ''}</div></div>
+      ${S.mode !== 'exam' ? `<span class="streak ${streak >= 3 ? 'hot' : ''}" id="streak" title="Correct answers in a row">${BLIP}<span>${streak}</span></span>` : ''}
+      <button class="iconbtn ${flags[S.list[S.i].q.id] ? 'on' : ''}" type="button" id="flagBtn" aria-pressed="${!!flags[S.list[S.i].q.id]}" aria-label="Flag for review">⚑</button>
+    </div>`;
+  if (showDots){
+    h += `<div class="dots" id="dots" role="navigation" aria-label="Jump to question">` +
+      S.list.map((x, k) => `<button class="${dotClass(x, k)}" type="button" data-k="${k}" aria-label="Question ${k + 1}">${k + 1}</button>`).join('') + `</div>`;
+  } else h += `<div class="bar"><i style="width:${100 * (S.i + 1) / n}%"></i></div>`;
+  return h + `</div>`;
+}
+function render(anim = true){
+  if (S.i >= S.list.length) S.i = S.list.length - 1;
+  const {topic, q} = S.list[S.i];
+  const chosen = chosenFor(q);
+  const examLive = S.mode === 'exam' && !S.done;
+  const picked = examLive ? S.picks[q.id] : null;
+  const answered = !!chosen;
+  const t = MANIFEST.topics.find(x => x.slug === topic.slug) || {};
+  let h = topBar() + `<article class="card ${anim ? 'enter' : ''}" id="card">
+      <div class="qno"><span class="chip">${esc(t.abbr || '')}</span><span class="label">${esc(topic.title)} · Q${q.n}</span></div>
+      ${q.noStem ? `<div class="note">The question text wasn't captured in the screenshots for this one. The options and explanations are complete.</div>` : ''}
+      <div class="stem">${paras(q.stem)}</div>${figs(q, 'stem')}
+      <div class="opts">`;
+  for (const L of Object.keys(q.options)){
+    let cls = '', mark = '';
+    if (answered){ if (L === q.answer){ cls = 'correct'; mark = '✓'; } else if (L === chosen){ cls = 'wrong'; mark = '✗'; } else cls = 'dim'; }
+    else if (picked === L) cls = 'picked';
+    h += `<button class="opt ${cls}" type="button" data-letter="${L}" ${answered ? 'disabled' : ''}><span class="L">${L}</span><span>${esc(q.options[L])}</span><span class="mark">${mark}</span></button>`;
+  }
+  h += `</div></article><div id="reveal">${answered ? reveal(q, chosen) : ''}</div>
+    ${examLive ? `<p class="hint">Exam mode: pick an answer and move on. You'll see answers and explanations when you finish.</p>` : ''}
+    <p class="src">Source: ${esc(topic.title)} · question ${q.n}${q.of ? ' of ' + q.of : ''} · swipe left or right to move</p>`;
+  app.innerHTML = h;
+  window.scrollTo(0, 0);
+  wire();
+  const cur = document.querySelector('.dot.cur'); if (cur) cur.scrollIntoView({inline: 'center', block: 'nearest'});
+  actions.hidden = false;
+  const prev = document.getElementById('prevBtn'), next = document.getElementById('nextBtn');
+  prev.disabled = S.i === 0;
+  const last = S.i === S.list.length - 1;
+  next.className = 'btn go';
+  if (examLive){ next.textContent = last ? 'Finish exam' : 'Next'; if (last) next.className = 'btn warn'; }
+  else next.textContent = last ? (S.mode === 'exam' ? 'Results' : 'Finish') : (answered ? 'Next' : 'Skip');
+  tick();
+}
+function wire(){
+  document.getElementById('homeBtn').onclick = () => { if (S.mode === 'exam' && !S.done && Object.keys(S.picks).length && !confirmExit()) return; home(); };
+  document.getElementById('flagBtn').onclick = toggleFlag;
+  app.querySelectorAll('.opt').forEach(b => b.onclick = () => choose(b.dataset.letter));
+  app.querySelectorAll('figure img').forEach(im => im.onclick = () => zoom(im.src));
+  app.querySelectorAll('.dot').forEach(d => d.onclick = () => { S.i = +d.dataset.k; render(); });
+}
+let exitArmed = 0;
+function confirmExit(){
+  const b = document.getElementById('homeBtn');
+  if (Date.now() - exitArmed < 3000) return true;
+  exitArmed = Date.now(); b.textContent = 'Leave?'; setTimeout(() => { if (b.isConnected) b.textContent = '←'; }, 3000);
+  return false;
+}
+function toggleFlag(){
+  const id = S.list[S.i].q.id;
+  if (flags[id]) delete flags[id]; else flags[id] = 1;
+  save('flags', flags);
+  const b = document.getElementById('flagBtn'); b.classList.toggle('on', !!flags[id]); b.setAttribute('aria-pressed', !!flags[id]);
+  const d = document.querySelector('.dot.cur'); if (d) d.classList.toggle('flag', !!flags[id]);
+}
+function reveal(q, chosen){
+  const ok = chosen === q.answer;
+  let h = `<div class="verdict ${ok ? 'ok' : 'bad'}"><span class="big">${ok ? '✓' : '✗'}</span><span>${ok ? 'Correct' : 'Not quite'}. The answer is ${q.answer}.</span></div>
+    ${q.note ? `<div class="note">${esc(q.note)}</div>` : ''}<div class="exp">`;
+  if (q.exp.O && q.exp.O.length) h += `<details class="xp" open><summary><span>Overall explanation</span></summary><div class="body">${paras(q.exp.O)}${figs(q, 'O')}</div></details>`;
+  const order = [q.answer, ...Object.keys(q.options).filter(L => L !== q.answer)];
+  for (const L of order){
+    const isC = L === q.answer, isW = L === chosen && !isC;
+    const body = (q.exp[L] && q.exp[L].length) ? paras(q.exp[L]) : (q.exp.O ? '' : `<p class="empty">No separate explanation was shown for this option.</p>`);
+    if (!body && !isC && !figs(q, L)) continue;
+    h += `<details class="xp ${isC ? 'is-correct' : ''} ${isW ? 'is-chosen' : ''}" ${isC || isW ? 'open' : ''}>
+      <summary><span class="L">${L}</span><span>${esc(q.options[L] || '')}</span><span class="tag">${isC ? 'Correct' : isW ? 'Your answer' : 'Why not?'}</span></summary>
+      <div class="body">${body || ''}${figs(q, L)}</div></details>`;
+  }
+  return h + figs(q, 'pre') + `</div>`;
+}
+function choose(L){
+  const {q} = S.list[S.i];
+  if (S.mode === 'exam' && !S.done){
+    S.picks[q.id] = L;
+    app.querySelectorAll('.opt').forEach(b => b.classList.toggle('picked', b.dataset.letter === L));
+    const d = document.querySelector('.dot.cur'); if (d) d.classList.add('sel');
+    return;
+  }
+  const ok = L === q.answer;
+  if (S.mode === 'wrong') S.picks[q.id] = L;
+  progress[q.id] = {c: L, ok, t: Date.now()}; save('progress', progress);
+  streak = ok ? streak + 1 : 0;
+  if (streak > best){ best = streak; save('best', best); }
+  app.querySelectorAll('.opt').forEach(b => {
+    b.disabled = true; const x = b.dataset.letter;
+    if (x === q.answer){ b.classList.add('correct'); b.querySelector('.mark').textContent = '✓'; }
+    else if (x === L){ b.classList.add('wrong'); b.querySelector('.mark').textContent = '✗'; }
+    else b.classList.add('dim');
+  });
+  const card = document.getElementById('card'); card.classList.remove('enter', 'pulse', 'shake'); void card.offsetWidth; card.classList.add(ok ? 'pulse' : 'shake');
+  const st = document.getElementById('streak');
+  if (st){ st.querySelector('span').textContent = streak; st.classList.toggle('hot', streak >= 3); }
+  const d = document.querySelector('.dot.cur'); if (d) d.classList.add(ok ? 'ok' : 'bad');
+  const r = document.getElementById('reveal'); r.innerHTML = reveal(q, L);
+  r.querySelectorAll('figure img').forEach(im => im.onclick = () => zoom(im.src));
+  const next = document.getElementById('nextBtn'); if (S.i < S.list.length - 1) next.textContent = 'Next';
+  setTimeout(() => r.firstElementChild.scrollIntoView({behavior: reduceMotion() ? 'auto' : 'smooth', block: 'start'}), 250);
+}
+function finishExam(){
+  S.done = true; S.end = Date.now();
+  for (const x of S.list){ const p = S.picks[x.q.id]; if (p) progress[x.q.id] = {c: p, ok: p === x.q.answer, t: Date.now()}; }
+  save('progress', progress);
+  results();
+}
+function results(){
+  actions.hidden = true;
+  let a = 0, c = 0;
+  S.list.forEach(x => { const p = S.mode === 'exam' ? (S.picks[x.q.id] ? {ok: S.picks[x.q.id] === x.q.answer} : null) : progress[x.q.id]; if (p){ a++; if (p.ok) c++; } });
+  const n = S.list.length;
+  const mins = S.end ? Math.round((S.end - S.start) / 60000) : null;
+  app.innerHTML = `<div class="top"><div class="row"><button class="iconbtn" type="button" id="homeBtn" aria-label="Back to systems">←</button>
+      <div class="where"><div class="t">${esc(S.title)}</div><div class="s">Results</div></div></div></div>
+    <section class="card result">
+      ${ring(n, a, c, 150)}
+      <div><div class="label">${esc(S.title)}</div><h2>${c} of ${n} correct</h2>
+        <div class="stats" style="margin-top:10px"><span><b>${a ? Math.round(100 * c / a) : 0}%</b>accuracy</span><span><b>${n - a}</b>unanswered</span>${mins !== null ? `<span><b>${mins} min</b>time taken</span>` : ''}</div></div>
+    </section>
+    <h2 class="label group-h" style="margin-top:22px">Tap a question to review it</h2>
+    <div class="dots" style="flex-wrap:wrap;overflow:visible">${S.list.map((x, k) => `<button class="${dotClass(x, -1)}" type="button" data-k="${k}" style="width:40px;height:40px;font-size:13px">${k + 1}</button>`).join('')}</div>
+    <div class="modes" style="margin-top:22px;grid-template-columns:1fr"><button class="mode primary" type="button" id="againBtn"><strong>Back to systems</strong><span>Pick another set</span></button></div>`;
+  window.scrollTo(0, 0);
+  document.getElementById('homeBtn').onclick = home;
+  document.getElementById('againBtn').onclick = home;
+  app.querySelectorAll('.dot').forEach(d => d.onclick = () => { S.i = +d.dataset.k; render(); });
+}
+function tick(){
+  const el = document.getElementById('timer');
+  if (!el || !S || S.mode !== 'exam' || S.done) return;
+  const s = Math.floor((Date.now() - S.start) / 1000);
+  el.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  setTimeout(tick, 1000);
+}
+function zoom(src){ document.getElementById('lbImg').src = src; document.getElementById('lightbox').hidden = false; }
+function go(delta){
+  if (!S) return;
+  if (delta > 0 && S.i === S.list.length - 1){
+    if (S.mode === 'exam' && !S.done) return finishExam();
+    if (S.mode === 'exam' || S.mode === 'mix' || S.mode === 'wrong' || S.mode === 'flag' || S.mode === 'unseen' || S.mode === 'topic') return results();
+  }
+  const ni = S.i + delta; if (ni < 0 || ni >= S.list.length) return;
+  S.i = ni; render();
+}
+document.getElementById('lightbox').onclick = () => document.getElementById('lightbox').hidden = true;
+document.getElementById('prevBtn').onclick = () => go(-1);
+document.getElementById('nextBtn').onclick = () => go(1);
+document.addEventListener('keydown', e => {
+  if (!S || actions.hidden) return;
+  if (/^[a-e]$/i.test(e.key)){ const b = app.querySelector(`.opt[data-letter="${e.key.toUpperCase()}"]`); if (b && !b.disabled) b.click(); }
+  if (e.key === 'ArrowRight') go(1);
+  if (e.key === 'ArrowLeft') go(-1);
+});
+let tx = null, ty = null;
+app.addEventListener('touchstart', e => { if (e.touches.length === 1 && !e.target.closest('.dots')){ tx = e.touches[0].clientX; ty = e.touches[0].clientY; } else tx = null; }, {passive: true});
+app.addEventListener('touchend', e => {
+  if (tx === null || !S || actions.hidden) return;
+  const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; tx = null;
+  if (Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) go(dx < 0 ? 1 : -1);
+}, {passive: true});
+boot();
+</script>
+</body></html>
